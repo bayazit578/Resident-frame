@@ -10,7 +10,7 @@ mov ax, cx
 *bold*
 ***bold***
 
-![text](hui.png)
+![text](IMG/hui.png)
 
 1. a
 2. b
