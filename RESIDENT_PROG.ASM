@@ -13,28 +13,28 @@ DISP_COL	    equ 19h
 VRAMSEG  	    equ 0b800h
 
 CMD_STR 	    equ 80h
-B_OFFSET        equ 4h
 REG_COUNT       equ 0dh
 REG_NAME_LN     equ 04h
-REG_TABLE_LN    equ 09h
+REG_TABLE_LN    equ 05h
+REG_VAL_LN      equ 04h
 REG_COL         equ 01001100b
-FRAME_COL1      equ 00101010b
+FRAME_COL1      equ 01111111b
 FRAME_COL2      equ 00011001b
-ZERO_ASCII      equ '0'
+SYMBOL          equ 29h
 
 Main:           push 00h
                 pop  es
+     
+                cli
                 mov  bx, (4 * 08h)
                 mov  ax, es:[bx]
                 mov  word ptr OldHandler08, ax
                 mov  ax, es:[bx+2]
                 mov  word ptr OldHandler08 + 2, ax
 
-                cli
                 mov  es:[bx], offset Handler08
                 mov  ax, cs
                 mov  es:[bx+2], ax
-                sti
 
                 mov  bx, (4 * 09h)
                 mov  ax, es:[bx]
@@ -42,7 +42,6 @@ Main:           push 00h
                 mov  ax, es:[bx+2]
                 mov  word ptr OldHandler09 + 2, ax
 
-                cli
                 mov  es:[bx], offset Handler09
                 mov  ax, cs
                 mov  es:[bx+2], ax
@@ -59,21 +58,109 @@ Main:           push 00h
 ;-----------------------------------------------------------
 
 Handler08       proc
-                push ax dx cx di ds es ; too many regs
-
-                push cs
-                pop  ds
+                push cx
 
                 xor  cx, cx
-                mov  cl, update_reg
-                jcxz @@end
+                mov  cl, cs:[update_reg]
+                cmp  cx, 1
+                je   @@call_new
 
-                ; some code...
-
-            @@end:
-                pop  es ds di cx dx ax
+                pop  cx
                 jmp  cs:[OldHandler08]
 
+            @@call_new:
+
+                push es ds di si dx bx ax
+
+                mov  bx, cs
+                mov  ds, bx
+
+                push bp
+                mov  bp, sp
+
+                mov  bx, VRAMSEG
+                mov  es, bx
+
+                mov  si, 2
+                mov  cx, 2
+                mov  word ptr di, frame_addr
+                add  di, (DISP_LN + 5) * 2
+                mov  ah, REG_COL
+
+            @@draw1:                                        ; ax bx 
+                mov  dx, ss:[bp + si]
+
+                push cx
+                call draw_reg_val
+                add  di, (DISP_LN - REG_VAL_LN) * 2
+                pop  cx
+
+                add  si, 2
+                loop @@draw1
+
+                mov  dx, ss:[bp + 16]                       ; cx
+                call draw_reg_val
+                add  di, (DISP_LN - REG_VAL_LN) * 2
+
+                mov  si, 6
+                mov  cx, 3
+
+            @@draw2:                                        ; dx si di
+                mov  dx, ss:[bp + si]
+
+                push cx
+                call draw_reg_val
+                add  di, (DISP_LN - REG_VAL_LN) * 2
+                pop  cx
+
+                add  si, 2
+                loop @@draw2
+
+                mov  dx, ss:[bp]                            ; bp
+                call draw_reg_val
+                add  di, (DISP_LN - REG_VAL_LN) * 2
+
+                mov  dx, sp                                 ; sp
+                add  dx, 22
+                call draw_reg_val
+                add  di, (DISP_LN - REG_VAL_LN) * 2
+
+                mov  si, 12
+                mov  cx, 2
+
+            @@draw3:                                        ; ds es
+                mov  dx, ss:[bp + si]
+
+                push cx
+                call draw_reg_val
+                add  di, (DISP_LN - REG_VAL_LN) * 2
+                pop  cx
+
+                add  si, 2
+                loop @@draw3
+
+                mov  dx, ss                                 ; ss
+                call draw_reg_val
+                add  di, (DISP_LN - REG_VAL_LN) * 2
+
+                mov  si, 18
+                mov  cx, 2
+
+            @@draw4:                                        ; cs ip
+                mov  dx, ss:[bp + si]
+
+                push cx
+                call draw_reg_val
+                add  di, (DISP_LN - REG_VAL_LN) * 2
+                pop  cx
+
+                add  si, 2
+                loop @@draw4
+
+                pop  bp
+
+                pop  ax bx dx si di ds es cx
+                jmp  cs:[OldHandler08]
 Handler08       endp
 
 ;-----------------------------------------------------------
@@ -84,21 +171,20 @@ Handler09       proc
                 push bp
                 mov  bp, sp
 
-                push ds ax
-
-                push cs
-                pop  ds
+                push ax
 
                 in   al, 60h
 
-                cmp  al, Symbol
+                cmp  al, SYMBOL
                 je   @@call_new
 
-                pop  ax ds bp
+                pop  ax bp
                 jmp  cs:[OldHandler09]
 
             @@call_new:
-                push bx cx dx di si es
+                push bx cx dx di si ds es
+                mov  bx, cs
+                mov  ds, bx
 
                 in   al, 61h
                 or   al, 80h
@@ -106,23 +192,19 @@ Handler09       proc
                 and  al, not 80h
                 out  61h, al
 
-                push VRAMSEG
-                pop  es
-                
+                mov  bx, VRAMSEG
+                mov  es, bx
+
                 mov  dx, REG_COUNT + 2
                 mov  cx, REG_NAME_LN + 6
                 lea  si, frame_symb2
-                xor  ax, ax
                 mov  ah, FRAME_COL1
-
                 call draw_frame
 
                 mov  dx, REG_COUNT
                 mov  cx, REG_NAME_LN + 4
                 lea  si, frame_symb1
-                xor  ax, ax
                 mov  ah, FRAME_COL2
-
                 call draw_frame
 
                 mov  word ptr di, frame_addr
@@ -130,18 +212,12 @@ Handler09       proc
 
                 call draw_reg_names
 
-                mov  word ptr di, frame_addr
-                add  di, (DISP_LN + 5) * 2
-                mov  dx, 0000111100001111b
-                mov  ah, REG_COL
-                call draw_reg_val
-
                 mov  byte ptr update_reg, 01h
 
                 mov  al, 20h
                 out  20h, al
 
-                pop  es si di dx cx bx ax ds
+                pop  es ds si di dx cx bx ax
                 
                 pop  bp
                 iret
@@ -262,7 +338,7 @@ draw_frame      endp
 ;-----------------------------------------------------------
 
 draw_reg_names  proc
-                mov  si, offset registers
+                lea  si, registers
                 mov  cx, REG_COUNT
 
             @@name_print:
@@ -307,7 +383,7 @@ print_str       endp
 ; Descr: byte_to_hex converts byte to hex representation
 ; 
 ; Entry: DX    -  reg value
-;        AH    -  text 
+;        AH    -  text color 
 ;        ES:DI -> place in vram to dump
 ;
 ; Assum: 
@@ -318,42 +394,40 @@ print_str       endp
 ;-----------------------------------------------------------
 
 draw_reg_val    proc
-                mov  cx, 4
+                mov  cx, REG_VAL_LN
+                lea  bx, hex_table
 
             @@print_char:
-                mov  al, dl
-                and  al, 00001111b
-
-                lea  bx, hex_table
+                mov  al, dh
+                shr  al, 4
                 xlatb                                       ; al = [bx + al]
                 stosw
-                shr  dl, 4
+                shl  dx, 4
                 loop @@print_char
 
                 ret
 draw_reg_val    endp
 
-hex_table       db '0123456789abcdf'
+hex_table       db '0123456789abcdef'
 frame_symb1     db 0dah, 0c4h, 0bfh, 0b3h, 0d9h, 0c4h, 0c0h, 0b3h
 frame_symb2     db 0c9h, 0cdh, 0bbh, 0bah, 0bch, 0cdh, 0c8h, 0bah
 frame_addr      dw 0
-registers       db 'ax: ', 4 dup (0), REG_COL 
-                db 'bx: ', 4 dup (0), REG_COL
-                db 'cx: ', 4 dup (0), REG_COL
-                db 'dx: ', 4 dup (0), REG_COL
-                db 'si: ', 4 dup (0), REG_COL
-                db 'di: ', 4 dup (0), REG_COL
-                db 'sp: ', 4 dup (0), REG_COL
-                db 'bp: ', 4 dup (0), REG_COL
-                db 'ds: ', 4 dup (0), REG_COL
-                db 'es: ', 4 dup (0), REG_COL
-                db 'ss: ', 4 dup (0), REG_COL
-                db 'cs: ', 4 dup (0), REG_COL
-                db 'ip: ', 4 dup (0), REG_COL
+registers       db 'ax: ', REG_COL 
+                db 'bx: ', REG_COL
+                db 'cx: ', REG_COL
+                db 'dx: ', REG_COL
+                db 'si: ', REG_COL
+                db 'di: ', REG_COL
+                db 'bp: ', REG_COL
+                db 'sp: ', REG_COL
+                db 'ds: ', REG_COL
+                db 'es: ', REG_COL
+                db 'ss: ', REG_COL
+                db 'cs: ', REG_COL
+                db 'ip: ', REG_COL
 update_reg      db 0
 OldHandler09    dd 0
 OldHandler08    dd 0
-Symbol          db 29h
 
 EOP:
 
