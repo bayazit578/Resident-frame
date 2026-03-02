@@ -12,11 +12,15 @@ DISP_LN         equ 50h
 DISP_COL	    equ 19h
 VRAMSEG  	    equ 0b800h
 
+NEXT_PAGE       equ 1000h
 CMD_STR 	    equ 80h
 REG_COUNT       equ 0dh
 REG_NAME_LN     equ 04h
 REG_TABLE_LN    equ 05h
 REG_VAL_LN      equ 04h
+
+FRAME_LN        equ 0ch
+FRAME_HGHT      equ 11h
 REG_COL         equ 01001100b
 FRAME_COL1      equ 01111111b
 FRAME_COL2      equ 00011001b
@@ -69,17 +73,42 @@ Handler08       proc
                 jmp  cs:[OldHandler08]
 
             @@call_new:
-
                 push es ds di si dx bx ax
-
+                
+                mov  bx, VRAMSEG
+                mov  es, bx
+                
                 mov  bx, cs
                 mov  ds, bx
 
+                mov  word ptr si, frame_addr
+                sub  si, (DISP_LN + 1) * 2                   ;
+                mov  di, si
+                sub  di, NEXT_PAGE * 2
+                mov  bx, si
+                add  bx, NEXT_PAGE * 2
+                mov  cx, FRAME_HGHT
+
+                ; mov  word ptr bx, frame_addr
+                ; sub  bx, (DISP_LN + 1) * 2                  ;
+                ; mov  di, bx
+                ; sub  di, NEXT_PAGE * 2
+                ; mov  si, bx
+                ; add  si, NEXT_PAGE * 2
+                ; mov  cx, FRAME_HGHT
+            
+            @@compare:
+                push cx
+                mov  cx, FRAME_LN
+                call cmp_bytes
+                add  si, (DISP_LN - FRAME_LN) * 2
+                add  di, (DISP_LN - FRAME_LN) * 2
+                add  bx, (DISP_LN - FRAME_LN) * 2
+                pop  cx
+                loop @@compare
+
                 push bp
                 mov  bp, sp
-
-                mov  bx, VRAMSEG
-                mov  es, bx
 
                 mov  si, 2
                 mov  cx, 2
@@ -261,6 +290,7 @@ draw_frame      proc
                 add  ax, bx
                 mov  di, ax
                 shl  di, 1
+                add  di, NEXT_PAGE * 2
 
                 mov  frame_addr, di
 
@@ -407,6 +437,63 @@ draw_reg_val    proc
 
                 ret
 draw_reg_val    endp
+
+;-----------------------------------------------------------
+; Descr: copy_bytes copies bytes from one string to another
+;
+; Entry: ES:SI -> string to copy
+;        ES:DI -> string to put a copied string
+;        CX    -  length of string to copy
+;
+; Assum: 
+;
+; Exit:  
+;
+; Destr: 
+;-----------------------------------------------------------
+
+copy_bytes      proc
+
+                mov dx, es:[si]
+                mov word ptr es:[di], dx
+                ret
+copy_bytes      endp
+
+;-----------------------------------------------------------
+; Descr: cmp_bytes compares bytes from 2 strings and write 
+;        different bytes to required buffers 
+;
+; Entry: ES:DI -> 1st string and 1st requred buffer to save
+;        ES:SI -> 2nd string
+;        ES:BX -> 2nd requred buffer to save
+;        CX    -  length of comparable strings
+;
+; Assum: 
+; 
+; Exit:
+;
+; Destr: BX, DX, SI, DI
+;-----------------------------------------------------------
+
+cmp_bytes       proc
+
+            @@compare:
+                mov dx, es:[di]
+                cmp dx, es:[si]
+                je  @@not_save
+                mov dx, es:[si]
+                mov word ptr es:[di], dx
+                mov dx, es:[di]
+                mov word ptr es:[bx], dx
+
+                @@not_save:
+                add di, 2 
+                add si, 2
+                add bx, 2
+                loop @@compare
+
+                ret
+cmp_bytes       endp
 
 hex_table       db '0123456789abcdef'
 frame_symb1     db 0dah, 0c4h, 0bfh, 0b3h, 0d9h, 0c4h, 0c0h, 0b3h
