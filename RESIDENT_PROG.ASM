@@ -197,21 +197,26 @@ Handler08       endp
 ;-----------------------------------------------------------
 
 Handler09       proc
-                push bp
-                mov  bp, sp
-
                 push ax
 
                 in   al, 60h
 
                 cmp  al, SYMBOL
-                je   @@call_new
+                je   @@ctrl_pressed
 
-                pop  ax bp
+                pop  ax
                 jmp  cs:[OldHandler09]
 
-            @@call_new:
-                push bx cx dx di si ds es
+            @@ctrl_pressed:
+                push es
+                mov  ax, 40h
+                mov  es, ax
+                mov  ax, word ptr es:[17h]
+
+                test al, 00000100b
+                jnz  @@erasing
+
+                push bx cx dx di si ds
                 mov  bx, cs
                 mov  ds, bx
 
@@ -246,9 +251,30 @@ Handler09       proc
                 mov  al, 20h
                 out  20h, al
 
-                pop  es ds si di dx cx bx ax
-                
-                pop  bp
+                pop  ds si di dx cx bx ax es
+                jmp  @@end
+
+            @@erasing:
+                in   al, 61h
+                or   al, 80h
+                out  61h, al
+                and  al, not 80h
+                out  61h, al
+
+                mov  ax, VRAMSEG
+                mov  es, ax
+                mov  word ptr di, frame_addr
+                mov  si, di
+                add  di, NEXT_PAGE * 2 
+                sub  si, NEXT_PAGE * 2
+                mov  cx, FRAME_LN
+                call copy_bytes
+
+                mov  al, 20h
+                out  20h, al
+                pop  es ax
+
+            @@end:
                 iret
 Handler09       endp
 
@@ -454,8 +480,10 @@ draw_reg_val    endp
 
 copy_bytes      proc
 
+            @@copy:
                 mov dx, es:[si]
                 mov word ptr es:[di], dx
+                loop @@copy
                 ret
 copy_bytes      endp
 
@@ -478,12 +506,12 @@ copy_bytes      endp
 cmp_bytes       proc
 
             @@compare:
-                mov dx, es:[di]
-                cmp dx, es:[si]
+                mov dx, word ptr es:[di]
+                cmp dx, word ptr es:[si]
                 je  @@not_save
-                mov dx, es:[si]
+                mov dx, word ptr es:[si]
                 mov word ptr es:[di], dx
-                mov dx, es:[di]
+                mov dx, word ptr es:[di]
                 mov word ptr es:[bx], dx
 
                 @@not_save:
