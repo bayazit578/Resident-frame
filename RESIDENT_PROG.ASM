@@ -178,6 +178,22 @@ Handler08       proc
                 add  si, 2
                 loop @@draw4
 
+
+                mov  di, word ptr frame_addr
+                sub  di, (DISP_LN + 1) * 2
+                mov  si, di
+                sub  di, NEXT_PAGE * 2
+                mov  cx, FRAME_HGHT
+
+            @@copy_frame:
+                mov  bx, cx 
+                mov  cx, FRAME_LN
+                call copy_bytes
+                add  di, (DISP_LN - FRAME_LN) * 2
+                add  si, (DISP_LN - FRAME_LN) * 2
+                mov  cx, bx
+                loop @@copy_frame
+
                 pop  bp
 
                 pop  ax bx dx si di ds es cx
@@ -518,10 +534,10 @@ cmp_bytes       proc
                 mov dx, word ptr es:[di]
                 cmp dx, word ptr es:[si]
                 je  @@not_save
-                mov dx, word ptr es:[si]
-                mov ax, word ptr es:[di]
-                mov word ptr es:[di], dx
-                mov word ptr es:[bx], ax
+                ; mov dx, word ptr es:[si]
+                mov dx, word ptr es:[di]
+                ; mov word ptr es:[di], dx
+                mov word ptr es:[bx], dx
 
                 @@not_save:
                 add di, 2
