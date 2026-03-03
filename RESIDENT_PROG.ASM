@@ -65,7 +65,7 @@ Handler08       proc
                 push cx
 
                 xor  cx, cx
-                mov  cl, cs:[update_reg]
+                mov  cl, byte ptr cs:[update_reg]
                 cmp  cx, 1
                 je   @@call_new
 
@@ -74,7 +74,7 @@ Handler08       proc
 
             @@call_new:
                 push es ds di si dx bx ax
-                
+                ;ax | bx cx dx si di bp -- ds es
                 mov  bx, VRAMSEG
                 mov  es, bx
                 
@@ -82,20 +82,12 @@ Handler08       proc
                 mov  ds, bx
 
                 mov  word ptr si, frame_addr
-                sub  si, (DISP_LN + 1) * 2                   ;
+                sub  si, (DISP_LN + 1) * 2
                 mov  di, si
                 sub  di, NEXT_PAGE * 2
                 mov  bx, si
                 add  bx, NEXT_PAGE * 2
                 mov  cx, FRAME_HGHT
-
-                ; mov  word ptr bx, frame_addr
-                ; sub  bx, (DISP_LN + 1) * 2                  ;
-                ; mov  di, bx
-                ; sub  di, NEXT_PAGE * 2
-                ; mov  si, bx
-                ; add  si, NEXT_PAGE * 2
-                ; mov  cx, FRAME_HGHT
             
             @@compare:
                 push cx
@@ -112,7 +104,7 @@ Handler08       proc
 
                 mov  si, 2
                 mov  cx, 2
-                mov  word ptr di, frame_addr
+                mov  di, word ptr frame_addr
                 add  di, (DISP_LN + 5) * 2
                 mov  ah, REG_COL
 
@@ -209,22 +201,21 @@ Handler09       proc
 
             @@ctrl_pressed:
                 push es
-                mov  ax, 40h
-                mov  es, ax
-                mov  ax, word ptr es:[17h]
-
-                test al, 00000100b
-                jnz  @@erasing
-
-                push bx cx dx di si ds
-                mov  bx, cs
-                mov  ds, bx
 
                 in   al, 61h
                 or   al, 80h
                 out  61h, al
                 and  al, not 80h
                 out  61h, al
+
+                call ctrl_recognize
+
+                pop  es
+                jnz  @@erasing
+
+                push bx cx dx si di ds es
+                mov  bx, cs
+                mov  ds, bx
 
                 mov  bx, VRAMSEG
                 mov  es, bx
@@ -241,38 +232,47 @@ Handler09       proc
                 mov  ah, FRAME_COL2
                 call draw_frame
 
-                mov  word ptr di, frame_addr
+                mov  di, word ptr frame_addr
                 add  di, (DISP_LN + 1) * 2
-
-                call draw_reg_names
 
                 mov  byte ptr update_reg, 01h
 
+                call draw_reg_names
+
                 mov  al, 20h
                 out  20h, al
 
-                pop  ds si di dx cx bx ax es
+                pop  es ds di si dx cx bx ax
                 jmp  @@end
 
             @@erasing:
-                in   al, 61h
-                or   al, 80h
-                out  61h, al
-                and  al, not 80h
-                out  61h, al
+                push bx cx si di ds es
+                mov  bx, cs
+                mov  ds, bx
+
+                mov  byte ptr cs:[update_reg], 00h
 
                 mov  ax, VRAMSEG
                 mov  es, ax
-                mov  word ptr di, frame_addr
+                mov  di, word ptr cs:[frame_addr]
+                sub  di, (DISP_LN + 1) * 2
                 mov  si, di
-                add  di, NEXT_PAGE * 2 
-                sub  si, NEXT_PAGE * 2
+                add  si, NEXT_PAGE * 2
+                sub  di, NEXT_PAGE * 2
+                mov  cx, FRAME_HGHT
+
+            @@erase_frame:
+                mov  bx, cx 
                 mov  cx, FRAME_LN
                 call copy_bytes
+                add  di, (DISP_LN - FRAME_LN) * 2
+                add  si, (DISP_LN - FRAME_LN) * 2
+                mov  cx, bx
+                loop @@erase_frame
 
                 mov  al, 20h
                 out  20h, al
-                pop  es ax
+                pop  es ds di si cx bx ax
 
             @@end:
                 iret
@@ -388,9 +388,16 @@ draw_frame      proc
 draw_frame      endp
 
 ;-----------------------------------------------------------
+; Descr: draw_reg_names draws register names in second page
+;        of vram
+; 
+; Entry: 
 ;
+; Assum:
 ;
+; Esit:  
 ;
+; Destr: AX, CX, DX, SI, DI
 ;-----------------------------------------------------------
 
 draw_reg_names  proc
@@ -481,8 +488,10 @@ draw_reg_val    endp
 copy_bytes      proc
 
             @@copy:
-                mov dx, es:[si]
+                mov dx, word ptr es:[si]
                 mov word ptr es:[di], dx
+                add si, 2
+                add di, 2
                 loop @@copy
                 ret
 copy_bytes      endp
@@ -500,7 +509,7 @@ copy_bytes      endp
 ; 
 ; Exit:
 ;
-; Destr: BX, DX, SI, DI
+; Destr: AX, BX, DX, SI, DI
 ;-----------------------------------------------------------
 
 cmp_bytes       proc
@@ -510,18 +519,40 @@ cmp_bytes       proc
                 cmp dx, word ptr es:[si]
                 je  @@not_save
                 mov dx, word ptr es:[si]
+                mov ax, word ptr es:[di]
                 mov word ptr es:[di], dx
-                mov dx, word ptr es:[di]
-                mov word ptr es:[bx], dx
+                mov word ptr es:[bx], ax
 
                 @@not_save:
-                add di, 2 
+                add di, 2
                 add si, 2
                 add bx, 2
                 loop @@compare
 
                 ret
 cmp_bytes       endp
+
+;-----------------------------------------------------------
+; Descr: ctrl_recognize recognizes the ctrl pressing and 
+;        sets ZF to 1 if ctrl pressed
+;
+; Entry: 
+;
+; Assum:
+;
+; Exit:
+;
+; Destr: AX, ES
+;-----------------------------------------------------------
+
+ctrl_recognize  proc
+                mov  ax, 40h
+                mov  es, ax
+                mov  ax, word ptr es:[17h]
+
+                test al, 00000100b
+                ret
+ctrl_recognize  endp
 
 hex_table       db '0123456789abcdef'
 frame_symb1     db 0dah, 0c4h, 0bfh, 0b3h, 0d9h, 0c4h, 0c0h, 0b3h
