@@ -14,13 +14,13 @@ VRAMSEG  	    equ 0b800h
 
 NEXT_PAGE       equ 1000h
 CMD_STR 	    equ 80h
-REG_COUNT       equ 0dh
-REG_NAME_LN     equ 04h
-REG_TABLE_LN    equ 05h
+REG_COUNT       equ 10h
+REG_NAME_LN     equ 05h
+REG_TABLE_LN    equ 06h
 REG_VAL_LN      equ 04h
 
-FRAME_LN        equ 0ch
-FRAME_HGHT      equ 11h
+FRAME_LN        equ 0dh
+FRAME_HGHT      equ 14h
 REG_COL         equ 01001100b
 FRAME_COL1      equ 01111111b
 FRAME_COL2      equ 00011001b
@@ -62,18 +62,18 @@ Main:           push 00h
 ;-----------------------------------------------------------
 
 Handler08       proc
-                push cx
+                push ax
 
-                xor  cx, cx
-                mov  cl, byte ptr cs:[update_reg]
-                cmp  cx, 1
+                xor  ax, ax
+                mov  al, byte ptr cs:[update_reg]
+                cmp  ax, 1
                 je   @@call_new
 
-                pop  cx
+                pop  ax
                 jmp  cs:[OldHandler08]
 
             @@call_new:
-                push es ds di si dx bx ax
+                push bx cx dx si di bp bp ds es
                 ;ax | bx cx dx si di bp -- ds es
                 mov  bx, VRAMSEG
                 mov  es, bx
@@ -99,16 +99,15 @@ Handler08       proc
                 pop  cx
                 loop @@compare
 
-                push bp
                 mov  bp, sp
 
-                mov  si, 2
-                mov  cx, 2
+                mov  si, 18
+                mov  cx, 10
                 mov  di, word ptr frame_addr
-                add  di, (DISP_LN + 5) * 2
+                add  di, (DISP_LN + REG_NAME_LN + 1) * 2
                 mov  ah, REG_COL
 
-            @@draw1:                                        ; ax bx 
+            @@draw1:                                        ; ax bx cx dx si di bp -- ds es
                 mov  dx, ss:[bp + si]
 
                 push cx
@@ -116,17 +115,23 @@ Handler08       proc
                 add  di, (DISP_LN - REG_VAL_LN) * 2
                 pop  cx
 
-                add  si, 2
+                sub  si, 2
                 loop @@draw1
 
-                mov  dx, ss:[bp + 16]                       ; cx
+                sub  di, (DISP_LN * 3) * 2
+                mov  dx, sp                                 ; sp
+                add  dx, 22
+                call draw_reg_val
+                add  di, (DISP_LN * 3 - REG_VAL_LN) * 2
+
+                mov  dx, ss                                 ; ss
                 call draw_reg_val
                 add  di, (DISP_LN - REG_VAL_LN) * 2
 
-                mov  si, 6
-                mov  cx, 3
+                mov  si, 18
+                mov  cx, 2
 
-            @@draw2:                                        ; dx si di
+            @@draw2:                                        ; cs ip
                 mov  dx, ss:[bp + si]
 
                 push cx
@@ -137,47 +142,9 @@ Handler08       proc
                 add  si, 2
                 loop @@draw2
 
-                mov  dx, ss:[bp]                            ; bp
-                call draw_reg_val
-                add  di, (DISP_LN - REG_VAL_LN) * 2
+                mov  dx, ss:[bp + 14h]
 
-                mov  dx, sp                                 ; sp
-                add  dx, 22
-                call draw_reg_val
-                add  di, (DISP_LN - REG_VAL_LN) * 2
-
-                mov  si, 12
-                mov  cx, 2
-
-            @@draw3:                                        ; ds es
-                mov  dx, ss:[bp + si]
-
-                push cx
-                call draw_reg_val
-                add  di, (DISP_LN - REG_VAL_LN) * 2
-                pop  cx
-
-                add  si, 2
-                loop @@draw3
-
-                mov  dx, ss                                 ; ss
-                call draw_reg_val
-                add  di, (DISP_LN - REG_VAL_LN) * 2
-
-                mov  si, 18
-                mov  cx, 2
-
-            @@draw4:                                        ; cs ip
-                mov  dx, ss:[bp + si]
-
-                push cx
-                call draw_reg_val
-                add  di, (DISP_LN - REG_VAL_LN) * 2
-                pop  cx
-
-                add  si, 2
-                loop @@draw4
-
+                call draw_flags
 
                 mov  di, word ptr frame_addr
                 sub  di, (DISP_LN + 1) * 2
@@ -194,9 +161,7 @@ Handler08       proc
                 mov  cx, bx
                 loop @@copy_frame
 
-                pop  bp
-
-                pop  ax bx dx si di ds es cx
+                pop  es ds bp bp di si dx cx bx ax
                 jmp  cs:[OldHandler08]
 Handler08       endp
 
@@ -534,9 +499,7 @@ cmp_bytes       proc
                 mov dx, word ptr es:[di]
                 cmp dx, word ptr es:[si]
                 je  @@not_save
-                ; mov dx, word ptr es:[si]
                 mov dx, word ptr es:[di]
-                ; mov word ptr es:[di], dx
                 mov word ptr es:[bx], dx
 
                 @@not_save:
@@ -570,23 +533,82 @@ ctrl_recognize  proc
                 ret
 ctrl_recognize  endp
 
+;-----------------------------------------------------------
+; Descr: draw_flags draws vals of flags in the frame
+;
+; Entry: DX    -  value of Flags register
+;        ES:DI -> place to draw flags
+;
+; Assum: 
+;
+; Exit:
+;
+; Destr: AX, DX, DI
+;-----------------------------------------------------------
+
+draw_flags      proc
+                rol  dx, 5
+                mov  cx, 4
+
+            @@draw1:
+                mov  al, dl
+                and  al, 1
+                add  al, '0'
+                stosw
+                rol  dx, 1
+                loop @@draw1
+
+                add  di, (DISP_LN - REG_VAL_LN) * 2
+
+                mov  al, dl
+                and  al, 1
+                add  al, '0'
+                stosw
+                rol  dx, 1
+                mov  cx, 3
+
+            @@draw2:
+                mov  al, dl
+                and  al, 1
+                add  al, '0'
+                stosw
+                rol  dx, 2
+                loop @@draw2
+
+                add  di, (DISP_LN - REG_VAL_LN) * 2
+
+                mov  al, dl
+                and  al, 1
+                add  al, '0'
+                stosw
+                mov  cx, 3
+                mov  al, '-'
+
+                rep stosw
+
+                ret
+draw_flags      endp
+
 hex_table       db '0123456789abcdef'
 frame_symb1     db 0dah, 0c4h, 0bfh, 0b3h, 0d9h, 0c4h, 0c0h, 0b3h
 frame_symb2     db 0c9h, 0cdh, 0bbh, 0bah, 0bch, 0cdh, 0c8h, 0bah
 frame_addr      dw 0
-registers       db 'ax: ', REG_COL 
-                db 'bx: ', REG_COL
-                db 'cx: ', REG_COL
-                db 'dx: ', REG_COL
-                db 'si: ', REG_COL
-                db 'di: ', REG_COL
-                db 'bp: ', REG_COL
-                db 'sp: ', REG_COL
-                db 'ds: ', REG_COL
-                db 'es: ', REG_COL
-                db 'ss: ', REG_COL
-                db 'cs: ', REG_COL
-                db 'ip: ', REG_COL
+registers       db 'ax:  ', REG_COL 
+                db 'bx:  ', REG_COL
+                db 'cx:  ', REG_COL
+                db 'dx:  ', REG_COL
+                db 'si:  ', REG_COL
+                db 'di:  ', REG_COL
+                db 'bp:  ', REG_COL
+                db 'sp:  ', REG_COL
+                db 'ds:  ', REG_COL
+                db 'es:  ', REG_COL
+                db 'ss:  ', REG_COL
+                db 'cs:  ', REG_COL
+                db 'ip:  ', REG_COL
+                db 'odit:', REG_COL
+                db 'szap:', REG_COL
+                db 'c---:', REG_COL
 update_reg      db 0
 OldHandler09    dd 0
 OldHandler08    dd 0
