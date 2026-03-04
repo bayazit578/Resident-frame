@@ -14,17 +14,26 @@ VRAMSEG  	    equ 0b800h
 
 NEXT_PAGE       equ 1000h
 CMD_STR 	    equ 80h
-REG_COUNT       equ 10h
+REG_COUNT       equ 0dh
+FLAG_COUNT      equ 09h
 REG_NAME_LN     equ 05h
 REG_TABLE_LN    equ 06h
 REG_VAL_LN      equ 04h
 
 FRAME_LN        equ 0dh
-FRAME_HGHT      equ 14h
+FRAME_HGHT      equ 13h
 REG_COL         equ 01001100b
 FRAME_COL1      equ 01111111b
 FRAME_COL2      equ 00011001b
 SYMBOL          equ 29h
+
+mDrawFlag MACRO length
+    mov  al, dl
+    and  al, 1
+    add  al, '0'
+    stosw
+    rol  dx, length
+ENDM
 
 Main:           push 00h
                 pop  es
@@ -144,9 +153,11 @@ Handler08       proc
 
                 mov  dx, ss:[bp + 14h]
 
-                call draw_flags
+                ; call draw_flags
 
                 mov  di, word ptr frame_addr
+                mov  ax, VRAMSEG
+                mov  ds, ax
                 sub  di, (DISP_LN + 1) * 2
                 mov  si, di
                 sub  di, NEXT_PAGE * 2
@@ -155,7 +166,7 @@ Handler08       proc
             @@copy_frame:
                 mov  bx, cx 
                 mov  cx, FRAME_LN
-                call copy_bytes
+                rep movsw
                 add  di, (DISP_LN - FRAME_LN) * 2
                 add  si, (DISP_LN - FRAME_LN) * 2
                 mov  cx, bx
@@ -201,13 +212,13 @@ Handler09       proc
                 mov  bx, VRAMSEG
                 mov  es, bx
 
-                mov  dx, REG_COUNT + 2
+                mov  dx, REG_COUNT + 3
                 mov  cx, REG_NAME_LN + 6
                 lea  si, frame_symb2
                 mov  ah, FRAME_COL1
                 call draw_frame
 
-                mov  dx, REG_COUNT
+                mov  dx, REG_COUNT + 1
                 mov  cx, REG_NAME_LN + 4
                 lea  si, frame_symb1
                 mov  ah, FRAME_COL2
@@ -235,6 +246,7 @@ Handler09       proc
 
                 mov  ax, VRAMSEG
                 mov  es, ax
+                mov  ds, ax
                 mov  di, word ptr cs:[frame_addr]
                 sub  di, (DISP_LN + 1) * 2
                 mov  si, di
@@ -243,9 +255,9 @@ Handler09       proc
                 mov  cx, FRAME_HGHT
 
             @@erase_frame:
-                mov  bx, cx 
+                mov  bx, cx
                 mov  cx, FRAME_LN
-                call copy_bytes
+                rep movsw
                 add  di, (DISP_LN - FRAME_LN) * 2
                 add  si, (DISP_LN - FRAME_LN) * 2
                 mov  cx, bx
@@ -368,6 +380,32 @@ draw_frame      proc
                 ret
 draw_frame      endp
 
+
+;-----------------------------------------------------------
+; Descr: print_str prints the string
+; 
+; Entry: DS:SI -> start of the string
+;        CX    =  string length
+;        ES:DI -> vram address start
+;
+; Assum: ES should be setted to vram seg
+;
+; Exit:
+;
+; Destr: SI, DI, CX
+;-----------------------------------------------------------
+
+print_str       proc
+                cld
+
+            @@print_string:
+                lodsb
+                stosw
+                loop @@print_string
+
+                ret
+print_str       endp
+
 ;-----------------------------------------------------------
 ; Descr: draw_reg_names draws register names in second page
 ;        of vram
@@ -399,32 +437,7 @@ draw_reg_names  proc
 draw_reg_names  endp
 
 ;-----------------------------------------------------------
-; Descr: print_str prints the string
-; 
-; Entry: DS:SI -> start of the string
-;        CX    =  string length
-;        ES:DI -> vram address start
-;
-; Assum: ES should be setted to vram seg
-;
-; Exit:
-;
-; Destr: SI, DI, CX
-;-----------------------------------------------------------
-
-print_str       proc
-                cld
-
-            @@print_string:
-                lodsb
-                stosw
-                loop @@print_string
-
-                ret
-print_str       endp
-
-;-----------------------------------------------------------
-; Descr: byte_to_hex converts byte to hex representation
+; Descr: draw_reg_val draws register names
 ; 
 ; Entry: DX    -  reg value
 ;        AH    -  text color 
@@ -451,31 +464,6 @@ draw_reg_val    proc
 
                 ret
 draw_reg_val    endp
-
-;-----------------------------------------------------------
-; Descr: copy_bytes copies bytes from one string to another
-;
-; Entry: ES:SI -> string to copy
-;        ES:DI -> string to put a copied string
-;        CX    -  length of string to copy
-;
-; Assum: 
-;
-; Exit:  
-;
-; Destr: 
-;-----------------------------------------------------------
-
-copy_bytes      proc
-
-            @@copy:
-                mov dx, word ptr es:[si]
-                mov word ptr es:[di], dx
-                add si, 2
-                add di, 2
-                loop @@copy
-                ret
-copy_bytes      endp
 
 ;-----------------------------------------------------------
 ; Descr: cmp_bytes compares bytes from 2 strings and write 
@@ -534,6 +522,22 @@ ctrl_recognize  proc
 ctrl_recognize  endp
 
 ;-----------------------------------------------------------
+; Descr: draw_flag_names draws flag names in vram
+;
+; Entry: 
+;
+; Assum:
+;
+; Exit:
+;
+; Destr:
+;-----------------------------------------------------------
+
+draw_flag_names proc
+
+draw_flag_names endp
+
+;-----------------------------------------------------------
 ; Descr: draw_flags draws vals of flags in the frame
 ;
 ; Entry: DX    -  value of Flags register
@@ -546,48 +550,33 @@ ctrl_recognize  endp
 ; Destr: AX, DX, DI
 ;-----------------------------------------------------------
 
-draw_flags      proc
+draw_flag_vals  proc
                 rol  dx, 5
                 mov  cx, 4
 
             @@draw1:
-                mov  al, dl
-                and  al, 1
-                add  al, '0'
-                stosw
-                rol  dx, 1
+                mDrawFlag 1
                 loop @@draw1
 
                 add  di, (DISP_LN - REG_VAL_LN) * 2
 
-                mov  al, dl
-                and  al, 1
-                add  al, '0'
-                stosw
-                rol  dx, 1
+                mDrawFlag 1
                 mov  cx, 3
 
             @@draw2:
-                mov  al, dl
-                and  al, 1
-                add  al, '0'
-                stosw
-                rol  dx, 2
+                mDrawFlag 2
                 loop @@draw2
 
                 add  di, (DISP_LN - REG_VAL_LN) * 2
 
-                mov  al, dl
-                and  al, 1
-                add  al, '0'
-                stosw
+                mDrawFlag 1
                 mov  cx, 3
                 mov  al, '-'
 
                 rep stosw
 
                 ret
-draw_flags      endp
+draw_flag_vals  endp
 
 hex_table       db '0123456789abcdef'
 frame_symb1     db 0dah, 0c4h, 0bfh, 0b3h, 0d9h, 0c4h, 0c0h, 0b3h
@@ -606,9 +595,7 @@ registers       db 'ax:  ', REG_COL
                 db 'ss:  ', REG_COL
                 db 'cs:  ', REG_COL
                 db 'ip:  ', REG_COL
-                db 'odit:', REG_COL
-                db 'szap:', REG_COL
-                db 'c---:', REG_COL
+flags           db 'oditszapc', REG_COL
 update_reg      db 0
 OldHandler09    dd 0
 OldHandler08    dd 0
