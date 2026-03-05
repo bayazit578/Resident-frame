@@ -4,7 +4,7 @@
 .code
 org 100h
 
-; 417 нажатость alt, ctrl, tab
+; 417 нажатость alt, ctrl
 
 locals @@
 
@@ -28,10 +28,11 @@ FRAME_COL2      equ 00011001b
 SYMBOL          equ 29h
 
 mDRAW_FLAG MACRO length
-    mov  al, dl
-    and  al, 1
-    add  al, '0'
-    stosw
+    mov  ax, dx
+    and  ax, 100000b
+    xor  word ptr es:[di], ax
+    add  di, 2
+
     rol  dx, length
 ENDM
 
@@ -568,25 +569,14 @@ draw_flag_vals  proc
                 mov  cx, 6
 
             @@draw1:
-                mov  ax, dx
-                and  ax, 100000b
-
-                xor  word ptr es:[di], ax
-                add  di, 2
-
-                rol  dx, 1
+                mDRAW_FLAG 1
                 loop @@draw1
 
                 rol  dx, 1
                 mov  cx, 3
 
             @@draw2:
-                mov  ax, dx
-                and  ax, 100000b
-
-                xor  word ptr es:[di], ax
-                add  di, 2
-                rol  dx, 2
+                mDRAW_FLAG 2
                 loop @@draw2
 
                 ret
