@@ -4,8 +4,6 @@
 .code
 org 100h
 
-; 417 нажатость alt, ctrl
-
 locals @@
 
 DISP_LN         equ 50h
