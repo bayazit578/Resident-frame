@@ -12,9 +12,9 @@
 2. Клонируйте этот репозиторий на свой компьютер
 3. Скомпилируйте и запустите
 ```asm
-tasm RESIDENT_PROG.ASM
-tlink /t RESIDE~1.OBJ
-RESIDE~1.COM
+tasm CST.ASM
+tlink /t CST.OBJ
+CST.COM
 ```
 
 ### Использование
