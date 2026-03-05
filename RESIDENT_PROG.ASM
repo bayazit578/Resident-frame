@@ -27,7 +27,7 @@ FRAME_COL1      equ 01111111b
 FRAME_COL2      equ 00011001b
 SYMBOL          equ 29h
 
-mDrawFlag MACRO length
+mDRAW_FLAG MACRO length
     mov  al, dl
     and  al, 1
     add  al, '0'
@@ -110,7 +110,7 @@ Handler08       proc
 
                 mov  bp, sp
 
-                mov  si, 18
+                mov  si, 18d
                 mov  cx, 10
                 mov  di, word ptr frame_addr
                 add  di, (DISP_LN + REG_NAME_LN + 1) * 2
@@ -129,7 +129,7 @@ Handler08       proc
 
                 sub  di, (DISP_LN * 3) * 2
                 mov  dx, sp                                 ; sp
-                add  dx, 22
+                add  dx, 24d
                 call draw_reg_val
                 add  di, (DISP_LN * 3 - REG_VAL_LN) * 2
 
@@ -137,7 +137,7 @@ Handler08       proc
                 call draw_reg_val
                 add  di, (DISP_LN - REG_VAL_LN) * 2
 
-                mov  si, 18
+                mov  si, 18d
                 mov  cx, 2
 
             @@draw2:                                        ; cs ip
@@ -151,9 +151,12 @@ Handler08       proc
                 add  si, 2
                 loop @@draw2
 
-                mov  dx, ss:[bp + 14h]
+                mov  dx, ss:[bp + 24d]                      ; flags
 
-                ; call draw_flags
+                sub  di, REG_NAME_LN * 2
+                call draw_flag_names
+                sub  di, FLAG_COUNT * 2
+                call draw_flag_vals
 
                 mov  di, word ptr frame_addr
                 mov  ax, VRAMSEG
@@ -227,9 +230,11 @@ Handler09       proc
                 mov  di, word ptr frame_addr
                 add  di, (DISP_LN + 1) * 2
 
-                mov  byte ptr update_reg, 01h
-
                 call draw_reg_names
+
+                ; call draw_flag_names
+
+                mov  byte ptr update_reg, 01h
 
                 mov  al, 20h
                 out  20h, al
@@ -297,7 +302,7 @@ draw_frame      proc
                 sub  bx, cx
                 shr  bx, 1
 
-                mov  ax, DISP_COL - 1
+                mov  ax, DISP_COL ;- 1
                 sub  ax, dx
                 shr  ax, 1
 
@@ -426,7 +431,7 @@ draw_reg_names  proc
             @@name_print:
                 mov  dx, cx
                 mov  cx, REG_NAME_LN
-                mov  ah, [si + REG_TABLE_LN - 1]
+                mov  ah, [si + REG_NAME_LN]
                 call print_str
                 add  di, (DISP_LN - REG_NAME_LN) * 2
                 add  si, REG_TABLE_LN - REG_NAME_LN
@@ -524,23 +529,31 @@ ctrl_recognize  endp
 ;-----------------------------------------------------------
 ; Descr: draw_flag_names draws flag names in vram
 ;
-; Entry: 
+; Entry: ES:DI -> address to draw
 ;
-; Assum:
+; Assum: 
 ;
 ; Exit:
 ;
-; Destr:
+; Destr: AX, CX, SI
 ;-----------------------------------------------------------
 
 draw_flag_names proc
-
+                lea  si, flags
+                mov  cx, FLAG_COUNT
+                mov  ah, [si + FLAG_COUNT]
+            
+            @@draw:
+                lodsb
+                stosw
+                loop @@draw
+                ret
 draw_flag_names endp
 
 ;-----------------------------------------------------------
 ; Descr: draw_flags draws vals of flags in the frame
 ;
-; Entry: DX    -  value of Flags register
+; Entry: DX    -  value of FLAGS
 ;        ES:DI -> place to draw flags
 ;
 ; Assum: 
@@ -551,29 +564,30 @@ draw_flag_names endp
 ;-----------------------------------------------------------
 
 draw_flag_vals  proc
-                rol  dx, 5
-                mov  cx, 4
+                ror  dx, 6
+                mov  cx, 6
 
             @@draw1:
-                mDrawFlag 1
+                mov  ax, dx
+                and  ax, 100000b
+
+                xor  word ptr es:[di], ax
+                add  di, 2
+
+                rol  dx, 1
                 loop @@draw1
 
-                add  di, (DISP_LN - REG_VAL_LN) * 2
-
-                mDrawFlag 1
+                rol  dx, 1
                 mov  cx, 3
 
             @@draw2:
-                mDrawFlag 2
+                mov  ax, dx
+                and  ax, 100000b
+
+                xor  word ptr es:[di], ax
+                add  di, 2
+                rol  dx, 2
                 loop @@draw2
-
-                add  di, (DISP_LN - REG_VAL_LN) * 2
-
-                mDrawFlag 1
-                mov  cx, 3
-                mov  al, '-'
-
-                rep stosw
 
                 ret
 draw_flag_vals  endp
