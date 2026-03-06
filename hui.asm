@@ -1,0 +1,70 @@
+.model tiny
+.code
+org 100h
+Start:              mov old09ofs, 100h
+                    mov old09seg, ds
+
+                    push 0
+                    pop es
+
+                    mov bx, 4*09h
+                    cli
+                    mov es:[bx], offset New09
+                    mov ax, cs
+                    mov es:[bx+2], ax
+                    sti
+
+                    mov ax, 1111h
+                    mov bx, 2222h
+                    mov cx, 3333h
+                    mov dx, 4444h
+                    mov si, 5555h
+                    mov di, 6666h
+
+                    push 7777h
+                    pop  ds
+
+                    pushf
+                    push cs
+                    call New09
+
+end:                mov ax, 3100h
+                    mov dx, offset EOPPP
+                    shr dx, 4
+                    inc dx
+                    int 21h
+
+New09               proc
+                    push ax bx es
+
+                    push 0b800h
+                    pop es
+                    mov bx, (80d*5 + 40d)*2
+                    mov ah, 4eh
+
+                    in al, 60h
+                    cmp al, 1
+                je end
+                    mov flag, 1
+
+                    in al, 61h
+                    or al, 80h
+                    out 61h, al
+                    and al, not 80h
+                    out 61h, al
+
+                    mov al, 20h
+                    out 20h, al
+
+                    pop es bx ax
+
+                    db 0eah
+old09ofs            dw 0
+old09seg            dw 0
+
+New09               endp
+
+flag                db 0
+
+EOPPP:
+end Start

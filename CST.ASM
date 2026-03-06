@@ -136,7 +136,7 @@ Handler08       proc
                 call draw_reg_val
                 add  di, (DISP_LN - REG_VAL_LN) * 2
 
-                mov  si, 18d
+                mov  si, 22d
                 mov  cx, 2
 
             @@draw2:                                        ; cs ip
@@ -147,7 +147,7 @@ Handler08       proc
                 add  di, (DISP_LN - REG_VAL_LN) * 2
                 pop  cx
 
-                add  si, 2
+                sub  si, 2
                 loop @@draw2
 
                 mov  dx, ss:[bp + 24d]                      ; flags
@@ -168,7 +168,7 @@ Handler08       proc
             @@copy_frame:
                 mov  bx, cx 
                 mov  cx, FRAME_LN
-                rep movsw
+                rep  movsw
                 add  di, (DISP_LN - FRAME_LN) * 2
                 add  si, (DISP_LN - FRAME_LN) * 2
                 mov  cx, bx
@@ -231,7 +231,6 @@ Handler09       proc
 
                 call draw_reg_names
 
-                ; call draw_flag_names
 
                 mov  byte ptr update_reg, 01h
 
@@ -383,7 +382,6 @@ draw_frame      proc
                 pop  bp
                 ret
 draw_frame      endp
-
 
 ;-----------------------------------------------------------
 ; Descr: print_str prints the string
